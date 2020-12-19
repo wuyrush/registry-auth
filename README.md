@@ -8,3 +8,5 @@ NOTE the token auth server:
 3. does no authentication and pass-through authorization.
 
 At the minimal level one can employ self-signed cert and the corresponding private key for token auth to function. Detailed how-to see `docker-compose.yml`
+
+(The token auth mechanism employed by Docker registry is based on [Json Web Token](https://jwt.io/introduction))
