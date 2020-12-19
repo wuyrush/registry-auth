@@ -1,0 +1,37 @@
+version: "3.8"
+
+# docker-compose -f docker-compose.yml up -d
+# make sure env vars are specified
+# - DOMAIN_NAME
+services:
+  auth:
+    build: .
+    environment:
+      - PORT=8443
+      - DOMAIN_NAME=${DOMAIN_NAME}
+      - AUTH_TOKEN_ISSUER=AuthIssuer # must be aligned with that set in registry
+    ports:
+      - 8443:8443 # it seems random port like 5001 won't work out for TLS traffic (client cannot start TCP handshake even server ACL and security group allows)
+    volumes:
+      - "./certs:/certs"  # holds TLS cert and private key for TLS and token auth
+
+  registry:
+    image: registry:2
+    ports:
+      - 443:443
+    environment:
+      #- REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY=/data
+      - REGISTRY_AUTH=token
+      - REGISTRY_LOG_LEVEL=debug
+      - REGISTRY_AUTH_TOKEN_REALM=https://${DOMAIN_NAME}:8443/auth # don't need to hardcode server's dns name, we do it in CNAME record; This is for auth handshake to work properly
+      - REGISTRY_AUTH_TOKEN_SERVICE=Auth
+      - REGISTRY_AUTH_TOKEN_ISSUER=AuthIssuer # must be aligned with that set in auth server
+      - REGISTRY_AUTH_TOKEN_ROOTCERTBUNDLE=/certs/token.crt
+        # https://github.com/docker/distribution/issues/1143
+        # NOTE the auth token rootcertbundle is independent of HTTP TLS stuff as they are for different purpose
+        # OK to use a self-signed cert as it is a contract iff registry and auth server are both under our control
+      - REGISTRY_HTTP_TLS_CERTIFICATE=/certs/${DOMAIN_NAME}.crt
+      - REGISTRY_HTTP_TLS_KEY=/certs/${DOMAIN_NAME}.key
+      - REGISTRY_HTTP_ADDR=0.0.0.0:443
+    volumes:
+      - "./certs:/certs"

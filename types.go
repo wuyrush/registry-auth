@@ -1,4 +1,4 @@
-package registry
+package main
 
 // Option is the registry token authorization server configuration options
 type Option struct {
@@ -11,6 +11,9 @@ type Option struct {
 	// .crt & .key file to sign JWT tokens
 	Certfile string
 	Keyfile  string
+	// file to the cert and key to serve on HTTPS
+	TLSCertFile string
+	TLSKeyFile  string
 	// token expiration time
 	TokenExpiration int64
 	// token issuer specified in docker registry configuration file

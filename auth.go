@@ -1,15 +1,17 @@
-package registry
+package main
 
 import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"github.com/docker/distribution/registry/auth/token"
-	"github.com/docker/libtrust"
+	"log"
 	"math/rand"
 	"strings"
 	"time"
+
+	"github.com/docker/distribution/registry/auth/token"
+	"github.com/docker/libtrust"
 )
 
 // Token rep the JWT token that'll be created when authentication/authorizations succeeds
@@ -32,6 +34,7 @@ type Authenticator interface {
 type Authorizer interface {
 	Authorize(req *AuthorizationRequest) ([]string, error)
 }
+
 // TokenGenerator: an implementation should create a valid JWT according to the spec here
 // https://github.com/docker/distribution/blob/1b9ab303a477ded9bdd3fc97e9119fa8f9e58fca/docs/spec/auth/jwt.md
 // a default implementation that follows the spec is used when it is not provided
@@ -50,7 +53,10 @@ func (d *DefaultAuthenticator) Authenticate(username, password string) error {
 type DefaultAuthorizer struct{}
 
 func (d *DefaultAuthorizer) Authorize(req *AuthorizationRequest) ([]string, error) {
-	return []string{"pull", "push"}, nil
+	// nop mode, giving whatever permission you need lol
+	var actions []string
+	actions = append(actions, req.Actions...)
+	return actions, nil
 }
 
 type tokenGenerator struct {
@@ -74,6 +80,7 @@ func (tg *tokenGenerator) Generate(req *AuthorizationRequest, actions []string) 
 		SigningAlg: algo,
 		KeyID:      tg.pubKey.KeyID(),
 	}
+	log.Printf("generated header: %+v\n", header)
 	headerJson, err := json.Marshal(header)
 	if err != nil {
 		return nil, err

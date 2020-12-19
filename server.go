@@ -1,9 +1,11 @@
-package registry
+package main
 
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 )
@@ -15,7 +17,8 @@ type AuthServer struct {
 	authorizer     Authorizer
 	authenticator  Authenticator
 	tokenGenerator TokenGenerator
-	crt, key string
+	tlsCrt, tlsKey string // cert and key for HTTPS
+	crt, key       string // cert and key for token signing
 }
 
 // NewAuthServer creates a new AuthServer
@@ -27,8 +30,15 @@ func NewAuthServer(opt *Option) (*AuthServer, error) {
 		opt.Authorizer = &DefaultAuthorizer{}
 	}
 
+	if opt.TLSCertFile == "" || opt.TLSKeyFile == "" {
+		msg := fmt.Sprintf("tls cert or key is empty. cert: %s key: %s\n", opt.TLSCertFile, opt.TLSKeyFile)
+		log.Println(msg)
+		return nil, errors.New(msg)
+	}
+
 	pb, prk, err := loadCertAndKey(opt.Certfile, opt.Keyfile)
 	if err != nil {
+		log.Println("error loading token cert and key")
 		return nil, err
 	}
 	tk := &TokenOption{Expire: opt.TokenExpiration, Issuer: opt.TokenIssuer}
@@ -38,21 +48,26 @@ func NewAuthServer(opt *Option) (*AuthServer, error) {
 	return &AuthServer{
 		authorizer:     opt.Authorizer,
 		authenticator:  opt.Authenticator,
-		tokenGenerator: opt.TokenGenerator, crt: opt.Certfile, key: opt.Keyfile,
+		tokenGenerator: opt.TokenGenerator,
+		crt:            opt.Certfile, key: opt.Keyfile,
+		tlsCrt: opt.TLSCertFile, tlsKey: opt.TLSKeyFile,
 	}, nil
 }
 
 func (srv *AuthServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// grab user's auth parameters
-	username, password, ok := r.BasicAuth()
-	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-	if err := srv.authenticator.Authenticate(username, password); err != nil {
-		http.Error(w, "unauthorized: invalid auth credentials", http.StatusUnauthorized)
-		return
-	}
+	// for repro we don't need authentication
+	//	// grab user's auth parameters
+	//	username, password, ok := r.BasicAuth()
+	//	if !ok {
+	//		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	//		return
+	//	}
+	//	if err := srv.authenticator.Authenticate(username, password); err != nil {
+	//		http.Error(w, "unauthorized: invalid auth credentials", http.StatusUnauthorized)
+	//		return
+	//	}
+	log.Printf("got request: %+v\n", r)
+
 	req := srv.parseRequest(r)
 	actions, err := srv.authorizer.Authorize(req)
 	if err != nil {
@@ -92,9 +107,8 @@ func (srv *AuthServer) parseRequest(r *http.Request) *AuthorizationRequest {
 }
 
 func (srv *AuthServer) Run(addr string) error {
-	http.Handle("/", srv)
-	fmt.Printf("Authentication server running at %s", addr)
-	return http.ListenAndServeTLS(addr, srv.crt, srv.key, nil)
+	fmt.Printf("Auth server running at %s", addr)
+	return http.ListenAndServeTLS(addr, srv.tlsCrt, srv.tlsKey, nil)
 }
 
 func (srv *AuthServer) ok(w http.ResponseWriter, tk *Token) {
